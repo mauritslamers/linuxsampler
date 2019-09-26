@@ -9,9 +9,14 @@ buildjob:
     - echo "deb http://ports.ubuntu.com/ubuntu-ports/ bionic-security main restricted universe multiverse" >> /etc/apt/sources.list
     - echo "deb http://ports.ubuntu.com/ubuntu-ports/ bionic-updates main restricted universe multiverse" >> /etc/apt/sources.list
     - apt-get update && apt-get upgrade -yy
-    - apt-get install -y build-essential crossbuild-essential-arm64 debhelper
+    - apt-get install -y build-essential crossbuild-essential-arm64 debhelper sbuild ubuntu-dev-tools
+    - mk-sbuild --target=arm64 bionic
+    - sbuild-update --keygen
 
   script:
     - cd $CI_PROJECT_DIR/libgig
-    - apt-get install -y libsndfile1-dev:arm64 doxygen:arm64 uuid-dev:arm64 libsqlite3-dev:arm64
-    - dpkg-buildpackage -aarm64 -rfakeroot -b
+    - apt-get build-dep -a arm64 libsndfile1-dev
+    - apt-get build-dep -a arm64 doxygen
+    - apt-get build-dep -a arm64 uuid-dev
+    - apt-get build-dep -a arm64 libsqlite3-dev
+    - sbuild --build=amd64 --host=arm64 -d bionic
