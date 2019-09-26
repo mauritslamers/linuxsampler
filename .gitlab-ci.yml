@@ -3,9 +3,11 @@ image: ubuntu:18.04
 variables:
   GIT_SSL_NO_VERIFY: "true"
 
-before_script:
-  - apt-get update && apt-get upgrade -yy
-  - apt-get install -y build-essential crossbuild-essential-arm64 debhelper
-  - apt-get install -y libsndfile1-dev doxygen uuid-dev libsqlite3-dev
-  - cd $CI_PROJECT_DIR/libgig
-  - CONFIG_SITE=/etc/dpkg-cross/cross-config.arm64 DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -aarm64 -Pcross,nocheck -rfakeroot -b
+buildjob:
+  before_script:
+    - apt-get update && apt-get upgrade -yy
+    - apt-get install -y build-essential crossbuild-essential-arm64 debhelper
+    - apt-get install -y libsndfile1-dev doxygen uuid-dev libsqlite3-dev
+  script:
+    - cd $CI_PROJECT_DIR
+    - CONFIG_SITE=/etc/dpkg-cross/cross-config.arm64 DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -aarm64 -Pcross,nocheck -rfakeroot -b
