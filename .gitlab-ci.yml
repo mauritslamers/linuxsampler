@@ -10,5 +10,5 @@ buildjob:
 
   script:
     - cd $CI_PROJECT_DIR/libgig
-    - apt-get install -y libsndfile1-dev doxygen uuid-dev libsqlite3-dev
+    - apt-get install -y libsndfile1-dev:arm64 doxygen:arm64 uuid-dev:arm64 libsqlite3-dev:arm64
     - dpkg-buildpackage -aarm64 -rfakeroot -b
