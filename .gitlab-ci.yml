@@ -7,7 +7,8 @@ buildjob:
   before_script:
     - apt-get update && apt-get upgrade -yy
     - apt-get install -y build-essential crossbuild-essential-arm64 debhelper
-    - apt-get install -y libsndfile1-dev doxygen uuid-dev libsqlite3-dev
+
   script:
     - cd $CI_PROJECT_DIR/libgig
-    - CONFIG_SITE=/etc/dpkg-cross/cross-config.arm64 DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -aarm64 -Pcross,nocheck -rfakeroot -b
+    - CONFIG_SITE=/etc/dpkg-cross/cross-config.arm64 apt-get install -y libsndfile1-dev doxygen uuid-dev libsqlite3-dev
+    - CONFIG_SITE=/etc/dpkg-cross/cross-config.arm64 CXX="-march=arm64" dpkg-buildpackage -aarm64 -Pcross,nocheck -rfakeroot -b
