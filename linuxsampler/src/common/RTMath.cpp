@@ -22,6 +22,13 @@
  ***************************************************************************/
 
 #include "RTMath.h"
+#if defined(__aarch64__)
+#include <time.h>
+#endif
+
+#if defined(__arm__)
+#include <time.h>
+#endif
 
 // for unsafeMicroSeconds() implementation
 #if !defined(WIN32) && !defined(__APPLE__)
@@ -73,6 +80,14 @@ RTMathBase::time_stamp_t RTMathBase::CreateTimeStamp() {
     return t;
     #elif defined(__APPLE__)
     return (time_stamp_t) mach_absolute_time();
+    #elif defined(__arm__)
+    timespec tp;
+    clock_gettime(CLOCK_MONOTONIC, &tp);
+    return tp.tv_nsec;
+    #elif defined(__aarch64__)
+    timespec tp;
+    clock_gettime(CLOCK_MONOTONIC, & tp);
+    return tp.tv_nsec;
     #else // we don't want to use a slow generic solution
     #  error "Sorry, LinuxSampler lacks time stamp code for your system."
     #  error "Please report this error and the CPU you are using to the LinuxSampler developers mailing list!"

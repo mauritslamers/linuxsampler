@@ -1186,6 +1186,222 @@ static __inline__ int atomic_dec_and_test(volatile atomic_t *v)
 #endif /* __ARCH_M68K_ATOMIC __ */
 
 #else
+#ifdef __arm__
+
+/*
+ * That part of code for ARM11 was taken from ALSA's iatomic.h
+ */
+
+/*
+ * FIXME: bellow code is valid only for SA11xx
+ */
+
+/*
+ * Save the current interrupt enable state & disable IRQs
+ */
+#define local_irq_save(x)					\
+	({							\
+		unsigned long temp;				\
+	__asm__ __volatile__(					\
+	"mrs	%0, cpsr		@ local_irq_save\n"	\
+"	orr	%1, %0, #128\n"					\
+"	msr	cpsr_c, %1"					\
+	: "=r" (x), "=r" (temp)					\
+	:							\
+	: "memory");						\
+	})
+
+/*
+ * restore saved IRQ & FIQ state
+ */
+#define local_irq_restore(x)					\
+	__asm__ __volatile__(					\
+	"msr	cpsr_c, %0		@ local_irq_restore\n"	\
+	:							\
+	: "r" (x)						\
+	: "memory")
+
+#define __save_flags_cli(x) local_irq_save(x)
+#define __restore_flags(x) local_irq_restore(x)
+
+typedef struct { volatile int counter; } atomic_t;
+
+#define ATOMIC_INIT(i)	{ (i) }
+
+#define atomic_read(v)	((v)->counter)
+#define atomic_set(v,i)	(((v)->counter) = (i))
+
+static __inline__ void atomic_add(int i, volatile atomic_t *v)
+{
+	unsigned long flags;
+
+	__save_flags_cli(flags);
+	v->counter += i;
+	__restore_flags(flags);
+}
+
+static __inline__ void atomic_sub(int i, volatile atomic_t *v)
+{
+	unsigned long flags;
+
+	__save_flags_cli(flags);
+	v->counter -= i;
+	__restore_flags(flags);
+}
+
+static __inline__ void atomic_inc(volatile atomic_t *v)
+{
+	unsigned long flags;
+
+	__save_flags_cli(flags);
+	v->counter += 1;
+	__restore_flags(flags);
+}
+
+static __inline__ void atomic_dec(volatile atomic_t *v)
+{
+	unsigned long flags;
+
+	__save_flags_cli(flags);
+	v->counter -= 1;
+	__restore_flags(flags);
+}
+
+static __inline__ int atomic_dec_and_test(volatile atomic_t *v)
+{
+	unsigned long flags;
+	int result;
+
+	__save_flags_cli(flags);
+	v->counter -= 1;
+	result = (v->counter == 0);
+	__restore_flags(flags);
+
+	return result;
+}
+
+static inline int atomic_add_negative(int i, volatile atomic_t *v)
+{
+	unsigned long flags;
+	int result;
+
+	__save_flags_cli(flags);
+	v->counter += i;
+	result = (v->counter < 0);
+	__restore_flags(flags);
+
+	return result;
+}
+
+static __inline__ void atomic_clear_mask(unsigned long mask, unsigned long *addr)
+{
+	unsigned long flags;
+
+	__save_flags_cli(flags);
+	*addr &= ~mask;
+	__restore_flags(flags);
+}
+
+#define mb() __asm__ __volatile__ ("" : : : "memory")
+#define rmb() mb()
+#define wmb() mb()
+
+#else
+
+#ifdef __aarch64__
+
+typedef struct { volatile int counter; } atomic_t;
+
+#define ATOMIC_INIT(i)	{ (i) }
+/*
+ * On ARM, ordinary assignment (str instruction) doesn't clear the local
+ * strex/ldrex monitor on some implementations. The reason we can use it for
+ * atomic_set() is the clrex or dummy strex done on every exception return.
+ */
+#define atomic_read(v)	((v)->counter)
+#define atomic_set(v,i)	(((v)->counter) = (i))
+
+/*
+ * AArch64 UP and SMP safe atomic ops.  We use load exclusive and
+ * store exclusive to ensure that these are atomic.  We may loop
+ * to ensure that the update happens.
+ */
+
+static __inline__ void atomic_add(int i, volatile atomic_t *v)
+{
+		unsigned long tmp;						\
+		int result;							\
+											\
+		asm volatile("// atomic_add\n"				\
+		"1:	ldxr	%w0, %2\n"						\
+		"	add	%w0, %w0, %w3\n"				\
+		"	stxr	%w1, %w0, %2\n"						\
+		"	cbnz	%w1, 1b"						\
+			: "=&r" (result), "=&r" (tmp), "+Q" (v->counter)		\
+			: "Ir" (i));
+}
+
+static __inline__ void atomic_sub(int i, volatile atomic_t *v)
+{
+		unsigned long tmp;						\
+		int result;							\
+											\
+		asm volatile("// atomic_sub\n"				\
+		"1:	ldxr	%w0, %2\n"						\
+		"	sub	%w0, %w0, %w3\n"				\
+		"	stxr	%w1, %w0, %2\n"						\
+		"	cbnz	%w1, 1b"						\
+			: "=&r" (result), "=&r" (tmp), "+Q" (v->counter)		\
+			: "Ir" (i));
+}
+
+#define atomic_inc(v)		atomic_add(1, v)
+#define atomic_dec(v)		atomic_sub(1, v)
+
+static inline int atomic_add_return(int i, atomic_t *v) {
+  unsigned long tmp;						\
+	int result;							\
+									\
+	asm volatile("// atomic_add_return\n"			\
+		"1:	ldxr	%w0, %2\n"						\
+		"	add	%w0, %w0, %w3\n"				\
+		"	stlxr	%w1, %w0, %2\n"						\
+	"	cbnz	%w1, 1b"						\
+	: "=&r" (result), "=&r" (tmp), "+Q" (v->counter)		\
+	: "Ir" (i)							\
+	: "memory");							\
+									\
+	/* smp_mb();				*/			\
+	return result;
+}
+
+static inline int atomic_sub_return(int i, atomic_t *v) {
+  unsigned long tmp;						\
+	int result;							\
+									\
+	asm volatile("// atomic_sub_return\n"			\
+		"1:	ldxr	%w0, %2\n"						\
+		"	sub	%w0, %w0, %w3\n"				\
+		"	stlxr	%w1, %w0, %2\n"						\
+	"	cbnz	%w1, 1b"						\
+	: "=&r" (result), "=&r" (tmp), "+Q" (v->counter)		\
+	: "Ir" (i)							\
+	: "memory");							\
+									\
+	/* smp_mb();				*/			\
+	return result;
+}
+
+#define atomic_inc_and_test(v) (atomic_add_return(1, v) == 0)
+#define atomic_dec_and_test(v) (atomic_sub_return(1, v) == 0)
+#define atomic_inc_return(v) (atomic_add_return(1, v))
+#define atomic_dec_return(v) (atomic_sub_return(1, v))
+#define atomic_sub_and_test(i, v) (atomic_sub_return(i, v) == 0)
+
+#define atomic_add_negative(i, v) (atomic_add_return(i, v) < 0)
+
+
+#else
 
 #warning libs/pbd has no implementation of strictly atomic operations for your hardware.
 
@@ -1232,6 +1448,8 @@ static __inline__ int atomic_inc_and_test(atomic_t *v)
 
 #  endif /* __NO_STRICT_ATOMIC */
 #  endif /* m68k */
+#  endif /* arm */
+#  endif /* aarch64 */
 #  endif /* mips */
 #  endif /* s390 */
 #  endif /* alpha */
